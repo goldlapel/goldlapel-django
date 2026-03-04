@@ -25,7 +25,7 @@ def _build_upstream_url(settings):
     else:
         userinfo = ""
 
-    name = settings.get("NAME") or ""
+    name = quote(settings.get("NAME") or "", safe="")
 
     return f"postgresql://{userinfo}{host}:{port}/{name}"
 

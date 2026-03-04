@@ -46,6 +46,11 @@ class TestBuildUpstreamUrl:
         assert "admin@h:" in url
         assert ":admin" not in url  # no colon before user in userinfo
 
+    def test_special_chars_in_name(self):
+        url = _build_upstream_url({"HOST": "h", "PORT": "5432", "NAME": "my#db?v=1",
+                                   "USER": "u", "PASSWORD": "p"})
+        assert url.endswith("/my%23db%3Fv%3D1")
+
     def test_unix_socket_raises(self):
         with pytest.raises(ValueError, match="Unix socket"):
             _build_upstream_url({"HOST": "/var/run/postgresql", "PORT": "5432", "NAME": "db"})
