@@ -35,7 +35,7 @@ class DatabaseWrapper(PgDatabaseWrapper):
         params = super().get_connection_params()
 
         gl_opts = params.pop("goldlapel", {})
-        gl_port = gl_opts.get("port", 7932)
+        gl_port = gl_opts.get("port", goldlapel.DEFAULT_PORT)
         gl_extra_args = gl_opts.get("extra_args")
 
         upstream = _build_upstream_url(self.settings_dict)
