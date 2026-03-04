@@ -1,0 +1,2 @@
+goldlapel
+Django>=4.2

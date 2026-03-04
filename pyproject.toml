@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "django-goldlapel"
+version = "0.1.0"
+description = "Django database backend for Gold Lapel — self-optimizing Postgres proxy"
+readme = "README.md"
+license = {text = "Proprietary"}
+requires-python = ">=3.9"
+authors = [{name = "Stephen Gibson"}]
+keywords = ["django", "postgres", "proxy", "optimization", "goldlapel", "database"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Topic :: Database",
+    "Framework :: Django",
+    "Framework :: Django :: 4.2",
+    "Framework :: Django :: 5.0",
+    "Framework :: Django :: 5.1",
+    "Programming Language :: Python :: 3",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+]
+dependencies = [
+    "goldlapel",
+    "Django>=4.2",
+]
+
+[project.urls]
+Homepage = "https://goldlapel.com"
+Repository = "https://github.com/goldlapel/goldlapel-django"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

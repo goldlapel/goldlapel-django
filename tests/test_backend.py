@@ -1,0 +1,132 @@
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+from django_goldlapel.base import DatabaseWrapper, _build_upstream_url
+
+
+# --- _build_upstream_url ---
+
+
+class TestBuildUpstreamUrl:
+    def test_standard(self):
+        settings = {"HOST": "db.example.com", "PORT": "5432", "NAME": "mydb",
+                     "USER": "admin", "PASSWORD": "secret"}
+        assert _build_upstream_url(settings) == "postgresql://admin:secret@db.example.com:5432/mydb"
+
+    def test_empty_host_defaults_to_localhost(self):
+        assert "localhost:" in _build_upstream_url({"HOST": "", "PORT": "5432", "NAME": "db"})
+
+    def test_none_host_defaults_to_localhost(self):
+        assert "localhost:" in _build_upstream_url({"HOST": None, "PORT": "5432", "NAME": "db"})
+
+    def test_empty_port_defaults_to_5432(self):
+        assert ":5432/" in _build_upstream_url({"HOST": "h", "PORT": "", "NAME": "db"})
+
+    def test_none_port_defaults_to_5432(self):
+        assert ":5432/" in _build_upstream_url({"HOST": "h", "PORT": None, "NAME": "db"})
+
+    def test_special_chars_in_password(self):
+        url = _build_upstream_url({"HOST": "h", "PORT": "5432", "NAME": "db",
+                                   "USER": "u", "PASSWORD": "@:/"})
+        assert "u:%40%3A%2F@" in url
+
+    def test_special_chars_in_user(self):
+        url = _build_upstream_url({"HOST": "h", "PORT": "5432", "NAME": "db",
+                                   "USER": "u@ser", "PASSWORD": "p"})
+        assert "u%40ser:p@" in url
+
+    def test_no_user_no_password(self):
+        url = _build_upstream_url({"HOST": "h", "PORT": "5432", "NAME": "db"})
+        assert url == "postgresql://h:5432/db"
+
+    def test_user_without_password(self):
+        url = _build_upstream_url({"HOST": "h", "PORT": "5432", "NAME": "db",
+                                   "USER": "admin"})
+        assert "admin@h:" in url
+        assert ":admin" not in url  # no colon before user in userinfo
+
+    def test_unix_socket_raises(self):
+        with pytest.raises(ValueError, match="Unix socket"):
+            _build_upstream_url({"HOST": "/var/run/postgresql", "PORT": "5432", "NAME": "db"})
+
+
+# --- DatabaseWrapper.get_connection_params ---
+
+
+def _make_wrapper(settings_dict):
+    wrapper = MagicMock(spec=DatabaseWrapper)
+    wrapper.settings_dict = settings_dict
+    return wrapper
+
+
+class TestGetConnectionParams:
+    @patch("django_goldlapel.base.goldlapel")
+    @patch("django_goldlapel.base.PgDatabaseWrapper.get_connection_params")
+    def test_starts_proxy_and_swaps_host_port(self, mock_super, mock_gl):
+        mock_super.return_value = {"host": "db.example.com", "port": 5432}
+        settings = {"HOST": "db.example.com", "PORT": "5432", "NAME": "mydb",
+                     "USER": "u", "PASSWORD": "p"}
+
+        wrapper = _make_wrapper(settings)
+        params = DatabaseWrapper.get_connection_params(wrapper)
+
+        mock_gl.start.assert_called_once()
+        assert params["host"] == "127.0.0.1"
+        assert params["port"] == 7932
+
+    @patch("django_goldlapel.base.goldlapel")
+    @patch("django_goldlapel.base.PgDatabaseWrapper.get_connection_params")
+    def test_custom_port(self, mock_super, mock_gl):
+        mock_super.return_value = {"host": "h", "port": 5432,
+                                   "goldlapel": {"port": 9000}}
+        wrapper = _make_wrapper({"HOST": "h", "PORT": "5432", "NAME": "db",
+                                 "USER": "u", "PASSWORD": "p"})
+        params = DatabaseWrapper.get_connection_params(wrapper)
+
+        mock_gl.start.assert_called_once_with(
+            _build_upstream_url(wrapper.settings_dict),
+            port=9000, extra_args=None,
+        )
+        assert params["port"] == 9000
+
+    @patch("django_goldlapel.base.goldlapel")
+    @patch("django_goldlapel.base.PgDatabaseWrapper.get_connection_params")
+    def test_extra_args(self, mock_super, mock_gl):
+        extra = ["--threshold-duration-ms", "200"]
+        mock_super.return_value = {"host": "h", "port": 5432,
+                                   "goldlapel": {"extra_args": extra}}
+        wrapper = _make_wrapper({"HOST": "h", "PORT": "5432", "NAME": "db",
+                                 "USER": "u", "PASSWORD": "p"})
+        DatabaseWrapper.get_connection_params(wrapper)
+
+        mock_gl.start.assert_called_once_with(
+            _build_upstream_url(wrapper.settings_dict),
+            port=7932, extra_args=extra,
+        )
+
+    @patch("django_goldlapel.base.goldlapel")
+    @patch("django_goldlapel.base.PgDatabaseWrapper.get_connection_params")
+    def test_goldlapel_key_removed_from_params(self, mock_super, mock_gl):
+        mock_super.return_value = {"host": "h", "port": 5432,
+                                   "goldlapel": {"port": 9000}}
+        wrapper = _make_wrapper({"HOST": "h", "PORT": "5432", "NAME": "db",
+                                 "USER": "u", "PASSWORD": "p"})
+        params = DatabaseWrapper.get_connection_params(wrapper)
+
+        assert "goldlapel" not in params
+
+    @patch("django_goldlapel.base.goldlapel")
+    @patch("django_goldlapel.base.PgDatabaseWrapper.get_connection_params")
+    def test_no_options_uses_defaults(self, mock_super, mock_gl):
+        mock_super.return_value = {"host": "h", "port": 5432}
+        wrapper = _make_wrapper({"HOST": "h", "PORT": "5432", "NAME": "db",
+                                 "USER": "u", "PASSWORD": "p"})
+        params = DatabaseWrapper.get_connection_params(wrapper)
+
+        mock_gl.start.assert_called_once_with(
+            _build_upstream_url(wrapper.settings_dict),
+            port=7932, extra_args=None,
+        )
+        assert params["host"] == "127.0.0.1"
+        assert params["port"] == 7932
