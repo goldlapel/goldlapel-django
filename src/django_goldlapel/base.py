@@ -36,10 +36,11 @@ class DatabaseWrapper(PgDatabaseWrapper):
 
         gl_opts = params.pop("goldlapel", {})
         gl_port = gl_opts.get("port", goldlapel.DEFAULT_PORT)
+        gl_config = gl_opts.get("config")
         gl_extra_args = gl_opts.get("extra_args")
 
         upstream = _build_upstream_url(self.settings_dict)
-        goldlapel.start(upstream, port=gl_port, extra_args=gl_extra_args)
+        goldlapel.start(upstream, config=gl_config, port=gl_port, extra_args=gl_extra_args)
 
         params["host"] = "127.0.0.1"
         params["port"] = gl_port

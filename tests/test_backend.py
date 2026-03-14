@@ -96,7 +96,7 @@ class TestGetConnectionParams:
 
         mock_gl.start.assert_called_once_with(
             _build_upstream_url(wrapper.settings_dict),
-            port=9000, extra_args=None,
+            config=None, port=9000, extra_args=None,
         )
         assert params["port"] == 9000
 
@@ -113,7 +113,7 @@ class TestGetConnectionParams:
 
         mock_gl.start.assert_called_once_with(
             _build_upstream_url(wrapper.settings_dict),
-            port=GOLDLAPEL_DEFAULT_PORT, extra_args=extra,
+            config=None, port=GOLDLAPEL_DEFAULT_PORT, extra_args=extra,
         )
 
     @patch("django_goldlapel.base.goldlapel")
@@ -130,6 +130,41 @@ class TestGetConnectionParams:
 
     @patch("django_goldlapel.base.goldlapel")
     @patch("django_goldlapel.base.PgDatabaseWrapper.get_connection_params")
+    def test_config_dict(self, mock_super, mock_gl):
+        mock_gl.DEFAULT_PORT = GOLDLAPEL_DEFAULT_PORT
+        cfg = {"mode": "butler", "pool_size": 30, "disable_n1": True}
+        mock_super.return_value = {"host": "h", "port": 5432,
+                                   "goldlapel": {"config": cfg}}
+        wrapper = _make_wrapper({"HOST": "h", "PORT": "5432", "NAME": "db",
+                                 "USER": "u", "PASSWORD": "p"})
+        DatabaseWrapper.get_connection_params(wrapper)
+
+        mock_gl.start.assert_called_once_with(
+            _build_upstream_url(wrapper.settings_dict),
+            config=cfg, port=GOLDLAPEL_DEFAULT_PORT, extra_args=None,
+        )
+
+    @patch("django_goldlapel.base.goldlapel")
+    @patch("django_goldlapel.base.PgDatabaseWrapper.get_connection_params")
+    def test_config_with_port_and_extra_args(self, mock_super, mock_gl):
+        mock_gl.DEFAULT_PORT = GOLDLAPEL_DEFAULT_PORT
+        cfg = {"mode": "butler"}
+        extra = ["--verbose"]
+        mock_super.return_value = {"host": "h", "port": 5432,
+                                   "goldlapel": {"config": cfg, "port": 9000,
+                                                 "extra_args": extra}}
+        wrapper = _make_wrapper({"HOST": "h", "PORT": "5432", "NAME": "db",
+                                 "USER": "u", "PASSWORD": "p"})
+        params = DatabaseWrapper.get_connection_params(wrapper)
+
+        mock_gl.start.assert_called_once_with(
+            _build_upstream_url(wrapper.settings_dict),
+            config=cfg, port=9000, extra_args=extra,
+        )
+        assert params["port"] == 9000
+
+    @patch("django_goldlapel.base.goldlapel")
+    @patch("django_goldlapel.base.PgDatabaseWrapper.get_connection_params")
     def test_no_options_uses_defaults(self, mock_super, mock_gl):
         mock_gl.DEFAULT_PORT = GOLDLAPEL_DEFAULT_PORT
         mock_super.return_value = {"host": "h", "port": 5432}
@@ -139,7 +174,7 @@ class TestGetConnectionParams:
 
         mock_gl.start.assert_called_once_with(
             _build_upstream_url(wrapper.settings_dict),
-            port=GOLDLAPEL_DEFAULT_PORT, extra_args=None,
+            config=None, port=GOLDLAPEL_DEFAULT_PORT, extra_args=None,
         )
         assert params["host"] == "127.0.0.1"
         assert params["port"] == GOLDLAPEL_DEFAULT_PORT

@@ -44,13 +44,20 @@ DATABASES = {
         "PORT": "5432",
         "OPTIONS": {
             "goldlapel": {
-                "port": 9000,  # proxy port (default: 7932)
+                "config": {                              # proxy configuration
+                    "mode": "butler",
+                    "pool_size": 30,
+                    "disable_n1": True,
+                },
+                "port": 9000,                            # proxy port (default: 7932)
                 "extra_args": ["--threshold-duration-ms", "200"],
             }
         },
     }
 }
 ```
+
+The `config` dict maps directly to Gold Lapel's configuration options (snake_case keys). See the [Gold Lapel docs](https://goldlapel.com/docs) for available settings.
 
 ## Multiple Databases
 
