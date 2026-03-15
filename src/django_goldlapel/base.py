@@ -1,3 +1,4 @@
+import os
 from urllib.parse import quote
 
 import goldlapel
@@ -40,6 +41,7 @@ class DatabaseWrapper(PgDatabaseWrapper):
         gl_extra_args = gl_opts.get("extra_args")
 
         upstream = _build_upstream_url(self.settings_dict)
+        os.environ["GOLDLAPEL_CLIENT"] = "django"
         goldlapel.start(upstream, config=gl_config, port=gl_port, extra_args=gl_extra_args)
 
         params["host"] = "127.0.0.1"
