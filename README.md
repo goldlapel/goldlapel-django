@@ -1,8 +1,8 @@
 # django-goldlapel
 
-Django database backend for [Gold Lapel](https://goldlapel.com) — self-optimizing Postgres proxy that automatically creates materialized views and indexes.
+Django database backend for [Gold Lapel](https://goldlapel.com) — self-optimizing Postgres proxy that automatically creates materialized views and indexes. Includes L1 native cache — an in-process cache that serves repeated reads in microseconds with no TCP round-trip.
 
-One-line change to your Django settings. Gold Lapel starts automatically on first database connection.
+One-line change to your Django settings. Gold Lapel starts automatically on first database connection, with L1 cache enabled out of the box.
 
 ## Install
 
@@ -92,6 +92,6 @@ This backend subclasses Django's built-in PostgreSQL backend. On first connectio
 
 1. Builds the upstream PostgreSQL URL from your `DATABASES` settings
 2. Starts the Gold Lapel proxy via [`goldlapel.start()`](https://github.com/goldlapel/goldlapel-python)
-3. Redirects Django's connection to the proxy (`127.0.0.1:7932`)
+3. Returns a connection through the proxy (`127.0.0.1:7932`) with L1 native cache active
 
-Everything else — migrations, ORM queries, raw SQL — works exactly as before, just faster.
+Everything else — migrations, ORM queries, raw SQL — works exactly as before, just faster. Repeated reads hit the L1 cache and return in microseconds without a TCP round-trip.
