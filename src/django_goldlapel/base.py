@@ -32,19 +32,27 @@ def _build_upstream_url(settings):
 
 
 class DatabaseWrapper(PgDatabaseWrapper):
+    _gl_port = goldlapel.DEFAULT_PORT
+
     def get_connection_params(self):
         params = super().get_connection_params()
 
         gl_opts = params.pop("goldlapel", {})
-        gl_port = gl_opts.get("port", goldlapel.DEFAULT_PORT)
+        self._gl_port = gl_opts.get("port", goldlapel.DEFAULT_PORT)
         gl_config = gl_opts.get("config")
         gl_extra_args = gl_opts.get("extra_args")
 
         upstream = _build_upstream_url(self.settings_dict)
         os.environ["GOLDLAPEL_CLIENT"] = "django"
-        goldlapel.start(upstream, config=gl_config, port=gl_port, extra_args=gl_extra_args)
+        goldlapel.start(upstream, config=gl_config, port=self._gl_port, extra_args=gl_extra_args)
 
         params["host"] = "127.0.0.1"
-        params["port"] = gl_port
+        params["port"] = self._gl_port
 
         return params
+
+    def get_new_connection(self, conn_params):
+        conn = super().get_new_connection(conn_params)
+        gl_opts = self.settings_dict.get("OPTIONS", {}).get("goldlapel", {})
+        inv_port = gl_opts.get("invalidation_port", self._gl_port + 2)
+        return goldlapel.wrap(conn, invalidation_port=inv_port)

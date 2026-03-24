@@ -178,3 +178,58 @@ class TestGetConnectionParams:
         )
         assert params["host"] == "127.0.0.1"
         assert params["port"] == GOLDLAPEL_DEFAULT_PORT
+
+
+class TestGetNewConnection:
+    @patch("django_goldlapel.base.goldlapel")
+    @patch("django_goldlapel.base.PgDatabaseWrapper.get_new_connection")
+    def test_wraps_connection_with_l1_cache(self, mock_super, mock_gl):
+        mock_gl.DEFAULT_PORT = GOLDLAPEL_DEFAULT_PORT
+        mock_conn = MagicMock()
+        mock_super.return_value = mock_conn
+        mock_gl.wrap.return_value = MagicMock()
+
+        wrapper = _make_wrapper({
+            "HOST": "h", "PORT": "5432", "NAME": "db",
+            "USER": "u", "PASSWORD": "p",
+            "OPTIONS": {},
+        })
+        wrapper._gl_port = GOLDLAPEL_DEFAULT_PORT
+        result = DatabaseWrapper.get_new_connection(wrapper, {"host": "127.0.0.1"})
+
+        mock_gl.wrap.assert_called_once_with(mock_conn, invalidation_port=GOLDLAPEL_DEFAULT_PORT + 2)
+        assert result == mock_gl.wrap.return_value
+
+    @patch("django_goldlapel.base.goldlapel")
+    @patch("django_goldlapel.base.PgDatabaseWrapper.get_new_connection")
+    def test_custom_invalidation_port(self, mock_super, mock_gl):
+        mock_gl.DEFAULT_PORT = GOLDLAPEL_DEFAULT_PORT
+        mock_super.return_value = MagicMock()
+        mock_gl.wrap.return_value = MagicMock()
+
+        wrapper = _make_wrapper({
+            "HOST": "h", "PORT": "5432", "NAME": "db",
+            "USER": "u", "PASSWORD": "p",
+            "OPTIONS": {"goldlapel": {"invalidation_port": 9999}},
+        })
+        wrapper._gl_port = GOLDLAPEL_DEFAULT_PORT
+        DatabaseWrapper.get_new_connection(wrapper, {"host": "127.0.0.1"})
+
+        mock_gl.wrap.assert_called_once_with(mock_super.return_value, invalidation_port=9999)
+
+    @patch("django_goldlapel.base.goldlapel")
+    @patch("django_goldlapel.base.PgDatabaseWrapper.get_new_connection")
+    def test_invalidation_port_derived_from_gl_port(self, mock_super, mock_gl):
+        mock_gl.DEFAULT_PORT = GOLDLAPEL_DEFAULT_PORT
+        mock_super.return_value = MagicMock()
+        mock_gl.wrap.return_value = MagicMock()
+
+        wrapper = _make_wrapper({
+            "HOST": "h", "PORT": "5432", "NAME": "db",
+            "USER": "u", "PASSWORD": "p",
+            "OPTIONS": {"goldlapel": {"port": 8000}},
+        })
+        wrapper._gl_port = 8000
+        DatabaseWrapper.get_new_connection(wrapper, {"host": "127.0.0.1"})
+
+        mock_gl.wrap.assert_called_once_with(mock_super.return_value, invalidation_port=8002)
