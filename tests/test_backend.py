@@ -180,6 +180,64 @@ class TestGetConnectionParams:
         assert params["port"] == GOLDLAPEL_DEFAULT_PORT
 
 
+class TestProxyStartFailureFallback:
+    @patch("django_goldlapel.base.goldlapel")
+    @patch("django_goldlapel.base.PgDatabaseWrapper.get_connection_params")
+    def test_fallback_preserves_original_host_port(self, mock_super, mock_gl):
+        mock_gl.DEFAULT_PORT = GOLDLAPEL_DEFAULT_PORT
+        mock_super.return_value = {"host": "db.example.com", "port": 5432}
+        mock_gl.start.side_effect = RuntimeError("binary not found")
+
+        wrapper = _make_wrapper({"HOST": "db.example.com", "PORT": "5432", "NAME": "db",
+                                 "USER": "u", "PASSWORD": "p"})
+        params = DatabaseWrapper.get_connection_params(wrapper)
+
+        assert params["host"] == "db.example.com"
+        assert params["port"] == 5432
+        assert wrapper._gl_active is False
+
+    @patch("django_goldlapel.base.goldlapel")
+    @patch("django_goldlapel.base.PgDatabaseWrapper.get_connection_params")
+    def test_fallback_logs_warning(self, mock_super, mock_gl):
+        mock_gl.DEFAULT_PORT = GOLDLAPEL_DEFAULT_PORT
+        mock_super.return_value = {"host": "h", "port": 5432}
+        mock_gl.start.side_effect = OSError("port conflict")
+
+        wrapper = _make_wrapper({"HOST": "h", "PORT": "5432", "NAME": "db",
+                                 "USER": "u", "PASSWORD": "p"})
+        import logging
+        with patch.object(logging.getLogger("goldlapel.django"), "warning") as mock_warn:
+            DatabaseWrapper.get_connection_params(wrapper)
+            mock_warn.assert_called_once()
+            assert "falling back to direct connection" in mock_warn.call_args[0][0]
+
+    @patch("django_goldlapel.base.goldlapel")
+    @patch("django_goldlapel.base.PgDatabaseWrapper.get_connection_params")
+    def test_gl_active_true_on_success(self, mock_super, mock_gl):
+        mock_gl.DEFAULT_PORT = GOLDLAPEL_DEFAULT_PORT
+        mock_super.return_value = {"host": "h", "port": 5432}
+
+        wrapper = _make_wrapper({"HOST": "h", "PORT": "5432", "NAME": "db",
+                                 "USER": "u", "PASSWORD": "p"})
+        DatabaseWrapper.get_connection_params(wrapper)
+
+        assert wrapper._gl_active is True
+
+    @patch("django_goldlapel.base.goldlapel")
+    @patch("django_goldlapel.base.PgDatabaseWrapper.get_connection_params")
+    def test_fallback_catches_file_not_found(self, mock_super, mock_gl):
+        mock_gl.DEFAULT_PORT = GOLDLAPEL_DEFAULT_PORT
+        mock_super.return_value = {"host": "h", "port": 5432}
+        mock_gl.start.side_effect = FileNotFoundError("goldlapel binary not found")
+
+        wrapper = _make_wrapper({"HOST": "h", "PORT": "5432", "NAME": "db",
+                                 "USER": "u", "PASSWORD": "p"})
+        params = DatabaseWrapper.get_connection_params(wrapper)
+
+        assert params["host"] == "h"
+        assert wrapper._gl_active is False
+
+
 class TestGetNewConnection:
     @patch("django_goldlapel.base.goldlapel")
     @patch("django_goldlapel.base.PgDatabaseWrapper.get_new_connection")
@@ -195,6 +253,7 @@ class TestGetNewConnection:
             "OPTIONS": {},
         })
         wrapper._gl_port = GOLDLAPEL_DEFAULT_PORT
+        wrapper._gl_active = True
         result = DatabaseWrapper.get_new_connection(wrapper, {"host": "127.0.0.1"})
 
         mock_gl.wrap.assert_called_once_with(mock_conn, invalidation_port=GOLDLAPEL_DEFAULT_PORT + 2)
@@ -213,6 +272,7 @@ class TestGetNewConnection:
             "OPTIONS": {"goldlapel": {"invalidation_port": 9999}},
         })
         wrapper._gl_port = GOLDLAPEL_DEFAULT_PORT
+        wrapper._gl_active = True
         DatabaseWrapper.get_new_connection(wrapper, {"host": "127.0.0.1"})
 
         mock_gl.wrap.assert_called_once_with(mock_super.return_value, invalidation_port=9999)
@@ -230,6 +290,26 @@ class TestGetNewConnection:
             "OPTIONS": {"goldlapel": {"port": 8000}},
         })
         wrapper._gl_port = 8000
+        wrapper._gl_active = True
         DatabaseWrapper.get_new_connection(wrapper, {"host": "127.0.0.1"})
 
         mock_gl.wrap.assert_called_once_with(mock_super.return_value, invalidation_port=8002)
+
+    @patch("django_goldlapel.base.goldlapel")
+    @patch("django_goldlapel.base.PgDatabaseWrapper.get_new_connection")
+    def test_skips_wrap_when_proxy_inactive(self, mock_super, mock_gl):
+        mock_gl.DEFAULT_PORT = GOLDLAPEL_DEFAULT_PORT
+        mock_conn = MagicMock()
+        mock_super.return_value = mock_conn
+
+        wrapper = _make_wrapper({
+            "HOST": "h", "PORT": "5432", "NAME": "db",
+            "USER": "u", "PASSWORD": "p",
+            "OPTIONS": {},
+        })
+        wrapper._gl_port = GOLDLAPEL_DEFAULT_PORT
+        wrapper._gl_active = False
+        result = DatabaseWrapper.get_new_connection(wrapper, {"host": "h"})
+
+        mock_gl.wrap.assert_not_called()
+        assert result == mock_conn
